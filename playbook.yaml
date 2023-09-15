@@ -1,0 +1,80 @@
+---
+- name: Provisioning Playbook
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update package cache
+      apt:
+        update_cache: yes
+
+    - name: Install Git
+      apt:
+        name: git
+        state: present
+
+    - name: Install curl
+      apt:
+        name: curl
+        state: present
+
+    - name: Install Node.js 16.x with curl
+      shell: curl -sL https://deb.nodesource.com/setup_16.x | sudo bash -
+
+    - name: Install Node.js
+      apt:
+        name: nodejs
+        state: present
+        update_cache: yes
+
+    - name: Update package cache again
+      command: apt update
+
+    - name: Install PM2
+      npm:
+        name: pm2
+        global: yes
+
+    - name: Clone Git repository
+      git:
+        repo: https://github.com/Mfilou/serveur-node.git
+        dest: /home/vagrant/node
+      become_user: vagrant
+
+    - name: Install project dependencies
+      npm:
+        path: /home/vagrant/node
+        state: present
+
+    - name: Start Node.js app with PM2
+      command: pm2 start /home/vagrant/node/app.js --force
+      become_user: vagrant
+
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Configure Nginx for the Node.js app
+      template:
+        src: ./node-app
+        dest: /etc/nginx/sites-available/node-app
+      notify:
+        - Reload Nginx
+
+    - name: delete the link if exist
+      file:
+        path: /etc/nginx/sites-enabled/node-app
+        state: absent
+      when: ansible_facts['file_exists'] | default(False)
+
+    - name: Adding a new link
+      file:
+        src: /etc/nginx/sites-available/node-app
+        dest: /etc/nginx/sites-enabled/node-app
+        state: link
+
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
